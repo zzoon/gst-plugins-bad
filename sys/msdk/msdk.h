@@ -49,16 +49,10 @@
 
 G_BEGIN_DECLS
 
-typedef struct _MsdkContext MsdkContext;
-
 mfxSession msdk_open_session (gboolean hardware);
 void msdk_close_session (mfxSession session);
 
 gboolean msdk_is_available (void);
-
-MsdkContext *msdk_open_context (gboolean hardware);
-void msdk_close_context (MsdkContext * context);
-mfxSession msdk_context_get_session (MsdkContext * context);
 
 mfxFrameSurface1 *msdk_get_free_surface (mfxFrameSurface1 * surfaces,
     guint size);
