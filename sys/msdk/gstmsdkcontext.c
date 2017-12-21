@@ -56,6 +56,8 @@ struct _GstMsdkContextPrivate
   gint fd;
   VADisplay dpy;
 #endif
+
+  GList *cached_alloc_responses;
 };
 
 #ifndef _WIN32
@@ -197,3 +199,18 @@ gst_msdk_context_get_fd (GstMsdkContext * context)
   return context->priv->fd;
 }
 #endif
+
+GstMsdkAllocResponse *
+gst_msdk_context_get_cached_alloc_responses (GstMsdkContext * context)
+{
+  GList *list = g_list_first (context->priv->cached_alloc_responses);
+  return list->data;
+}
+
+void
+gst_msdk_context_add_alloc_response (GstMsdkContext * context,
+    GstMsdkAllocResponse * resp)
+{
+  context->priv->cached_alloc_responses =
+      g_list_append (context->priv->cached_alloc_responses, resp);
+}
