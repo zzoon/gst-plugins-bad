@@ -86,6 +86,34 @@ VADisplay gst_msdk_context_get_va_display (GstMsdkContext * context);
 gint gst_msdk_context_get_fd (GstMsdkContext * context);
 #endif
 
+/* GstMsdkContext contains mfxFrameAllocResponses,
+ * if app calls MFXVideoCORE_SetFrameAllocator.
+ */
+typedef struct _GstMsdkAllocResponse GstMsdkAllocResponse;
+
+struct _GstMsdkAllocResponse {
+  mfxFrameAllocResponse *response;
+  mfxFrameAllocRequest request;
+  mfxMemId *mem_ids;
+  gint num_used_memory;
+};
+
+GstMsdkAllocResponse *
+gst_msdk_context_get_cached_alloc_responses (GstMsdkContext * context,
+    mfxFrameAllocResponse * resp);
+
+GstMsdkAllocResponse *
+gst_msdk_context_get_cached_alloc_responses_by_request (GstMsdkContext * context,
+    mfxFrameAllocRequest * req);
+
+void
+gst_msdk_context_add_alloc_response (GstMsdkContext * context,
+    GstMsdkAllocResponse * resp);
+
+gboolean
+gst_msdk_context_remove_alloc_response (GstMsdkContext * context,
+    mfxFrameAllocResponse * resp);
+
 G_END_DECLS
 
 #endif /* GST_MSDK_CONTEXT_H */
