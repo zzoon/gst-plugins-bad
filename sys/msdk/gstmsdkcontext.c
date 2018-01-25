@@ -56,7 +56,7 @@ struct _GstMsdkContextPrivate
   gint fd;
   VADisplay dpy;
 #endif
-
+  gint shared_async_depth;
   GList *cached_alloc_responses;
 };
 
@@ -273,4 +273,17 @@ gst_msdk_context_remove_alloc_response (GstMsdkContext * context,
       g_list_delete_link (priv->cached_alloc_responses, l);
 
   return TRUE;
+}
+
+gint
+gst_msdk_context_get_shared_async_depth (GstMsdkContext * context)
+{
+  return context->priv->shared_async_depth;
+}
+
+void
+gst_msdk_context_add_shared_async_depth (GstMsdkContext * context,
+    gint async_depth)
+{
+  context->priv->shared_async_depth += async_depth;
 }

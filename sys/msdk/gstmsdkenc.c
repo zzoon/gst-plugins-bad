@@ -164,6 +164,8 @@ gst_msdkenc_set_context (GstElement * element, GstContext * context)
     thiz->context = msdk_context;
   }
 
+  gst_msdk_context_add_shared_async_depth (thiz->context, thiz->async_depth);
+
   GST_ELEMENT_CLASS (parent_class)->set_context (element, context);
 }
 
