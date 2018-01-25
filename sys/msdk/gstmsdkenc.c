@@ -48,7 +48,7 @@
 #include "gstmsdkbufferpool.h"
 #include "gstmsdkvideomemory.h"
 #include "gstmsdksystemmemory.h"
-#include "gstmsdkallocator.h"
+#include "gstmsdkcontextutil.h"
 
 static inline void *
 _aligned_alloc (size_t alignment, size_t size)
@@ -150,6 +150,23 @@ gst_msdkenc_add_extra_param (GstMsdkEnc * thiz, mfxExtBuffer * param)
   }
 }
 
+static void
+gst_msdkenc_set_context (GstElement * element, GstContext * context)
+{
+  GstMsdkContext *msdk_context = NULL;
+  GstMsdkEnc *thiz = GST_MSDKENC (element);
+
+  if (gst_msdk_context_get_context (context, &msdk_context)) {
+    if (thiz->context) {
+      GST_ERROR_OBJECT (thiz, "already context :%p", thiz->context);
+      gst_object_unref (thiz->context);
+    }
+    thiz->context = msdk_context;
+  }
+
+  GST_ELEMENT_CLASS (parent_class)->set_context (element, context);
+}
+
 static gboolean
 gst_msdkenc_init_encoder (GstMsdkEnc * thiz)
 {
@@ -160,20 +177,16 @@ gst_msdkenc_init_encoder (GstMsdkEnc * thiz)
   mfxFrameAllocRequest request[2];
   guint i;
 
+  if (!thiz->context) {
+    GST_WARNING_OBJECT (thiz, "No MSDK Context");
+    return FALSE;
+  }
+
   if (!thiz->input_state) {
     GST_DEBUG_OBJECT (thiz, "Have no input state yet");
     return FALSE;
   }
   info = &thiz->input_state->info;
-
-  /* make sure that the encoder is closed */
-  gst_msdkenc_close_encoder (thiz);
-
-  thiz->context = gst_msdk_context_new (thiz->hardware);
-  if (!thiz->context) {
-    GST_ERROR_OBJECT (thiz, "Context creation failed");
-    return FALSE;
-  }
 
   GST_OBJECT_LOCK (thiz);
   session = gst_msdk_context_get_session (thiz->context);
@@ -345,6 +358,9 @@ gst_msdkenc_init_encoder (GstMsdkEnc * thiz)
     GST_WARNING_OBJECT (thiz, "Encode Query IO surfaces returned: %s",
         msdk_status_to_string (status));
   }
+
+  if (thiz->has_vpp)
+    request[0].NumFrameSuggested += thiz->num_vpp_surfaces + 1 - 4;
 
   if (thiz->use_video_memory)
     gst_msdk_frame_alloc (thiz->context, &(request[0]), &thiz->alloc_resp);
@@ -1110,6 +1126,15 @@ invalid_frame:
 static gboolean
 gst_msdkenc_start (GstVideoEncoder * encoder)
 {
+  GstMsdkEnc *thiz = GST_MSDKENC (encoder);
+
+  if (gst_msdk_context_prepare (GST_ELEMENT_CAST (thiz), &thiz->context)) {
+    GST_WARNING_OBJECT (thiz, "Found context from neighbour %p", thiz->context);
+  } else {
+    GST_INFO_OBJECT (thiz, "Not found context from neighbour");
+    gst_msdk_context_ensure_context (GST_ELEMENT_CAST (thiz), thiz->hardware);
+  }
+
   /* Set the minimum pts to some huge value (1000 hours). This keeps
      the dts at the start of the stream from needing to be
      negative. */
@@ -1361,6 +1386,8 @@ gst_msdkenc_class_init (GstMsdkEncClass * klass)
   gobject_class->set_property = gst_msdkenc_set_property;
   gobject_class->get_property = gst_msdkenc_get_property;
   gobject_class->finalize = gst_msdkenc_finalize;
+
+  element_class->set_context = gst_msdkenc_set_context;
 
   gstencoder_class->set_format = GST_DEBUG_FUNCPTR (gst_msdkenc_set_format);
   gstencoder_class->handle_frame = GST_DEBUG_FUNCPTR (gst_msdkenc_handle_frame);

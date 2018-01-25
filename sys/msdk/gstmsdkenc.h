@@ -76,6 +76,7 @@ struct _GstMsdkEnc
   guint num_tasks;
   MsdkEncTask *tasks;
   guint next_task;
+  gboolean shared_context;
 
   gboolean has_vpp;
   mfxVideoParam vpp_param;

@@ -39,6 +39,7 @@
 #include "gstmsdkbufferpool.h"
 #include "gstmsdkvideomemory.h"
 #include "gstmsdksystemmemory.h"
+#include "gstmsdkcontextutil.h"
 
 GST_DEBUG_CATEGORY_EXTERN (gst_msdkdec_debug);
 #define GST_CAT_DEFAULT gst_msdkdec_debug
@@ -220,6 +221,23 @@ gst_msdkdec_close_decoder (GstMsdkDec * thiz)
   memset (&thiz->param, 0, sizeof (thiz->param));
 }
 
+static void
+gst_msdkdec_set_context (GstElement * element, GstContext * context)
+{
+  GstMsdkContext *msdk_context = NULL;
+  GstMsdkDec *thiz = GST_MSDKDEC (element);
+
+  if (gst_msdk_context_get_context (context, &msdk_context)) {
+    if (thiz->context) {
+      GST_ERROR_OBJECT (thiz, "already context :%p", thiz->context);
+      gst_object_unref (thiz->context);
+    }
+    thiz->context = msdk_context;
+  }
+
+  GST_ELEMENT_CLASS (parent_class)->set_context (element, context);
+}
+
 static gboolean
 gst_msdkdec_init_decoder (GstMsdkDec * thiz)
 {
@@ -229,20 +247,16 @@ gst_msdkdec_init_decoder (GstMsdkDec * thiz)
   mfxStatus status;
   mfxFrameAllocRequest request;
 
+  if (!thiz->context) {
+    GST_WARNING_OBJECT (thiz, "No MSDK Context");
+    return FALSE;
+  }
+
   if (!thiz->input_state) {
     GST_DEBUG_OBJECT (thiz, "Have no input state yet");
     return FALSE;
   }
   info = &thiz->input_state->info;
-
-  /* make sure that the decoder is closed */
-  gst_msdkdec_close_decoder (thiz);
-
-  thiz->context = gst_msdk_context_new (thiz->hardware);
-  if (!thiz->context) {
-    GST_ERROR_OBJECT (thiz, "Context creation failed");
-    return FALSE;
-  }
 
   GST_OBJECT_LOCK (thiz);
 
@@ -338,6 +352,7 @@ gst_msdkdec_init_decoder (GstMsdkDec * thiz)
 
   GST_OBJECT_UNLOCK (thiz);
 
+  thiz->initialized = TRUE;
   return TRUE;
 
 failed:
@@ -372,7 +387,12 @@ gst_msdkdec_set_src_caps (GstMsdkDec * thiz)
   /* TODO: If downstream accepts msdk memory or dmabuf,
    * this should be TRUE and using MFX_IOPATTERN_OUT_VIDEO_MEMORY
    */
-  thiz->use_video_memory = FALSE;
+#ifndef _WIN32
+  if (thiz->shared_context)
+    thiz->use_video_memory = TRUE;
+  else
+#endif
+    thiz->use_video_memory = FALSE;
 
   return TRUE;
 }
@@ -462,6 +482,22 @@ gst_msdkdec_finish_task (GstMsdkDec * thiz, MsdkDecTask * task)
     return flow;
   }
   return GST_FLOW_OK;
+}
+
+static gboolean
+gst_msdkdec_start (GstVideoDecoder * decoder)
+{
+  GstMsdkDec *thiz = GST_MSDKDEC (decoder);
+
+  if (gst_msdk_context_prepare (GST_ELEMENT_CAST (thiz), &thiz->context)) {
+    GST_INFO_OBJECT (thiz, "Found context from neighbour %" GST_PTR_FORMAT,
+        thiz->context);
+    thiz->shared_context = TRUE;
+  } else {
+    gst_msdk_context_ensure_context (GST_ELEMENT_CAST (thiz), thiz->hardware);
+  }
+
+  return TRUE;
 }
 
 static gboolean
@@ -846,7 +882,7 @@ gst_msdkdec_drain (GstVideoDecoder * decoder)
   mfxStatus status;
   guint i;
 
-  if (!thiz->context)
+  if (!thiz->initialized)
     return GST_FLOW_OK;
   session = gst_msdk_context_get_session (thiz->context);
 
@@ -1010,7 +1046,10 @@ gst_msdkdec_class_init (GstMsdkDecClass * klass)
   gobject_class->get_property = gst_msdkdec_get_property;
   gobject_class->finalize = gst_msdkdec_finalize;
 
+  element_class->set_context = gst_msdkdec_set_context;
+
   decoder_class->close = GST_DEBUG_FUNCPTR (gst_msdkdec_close);
+  decoder_class->start = GST_DEBUG_FUNCPTR (gst_msdkdec_start);
   decoder_class->stop = GST_DEBUG_FUNCPTR (gst_msdkdec_stop);
   decoder_class->set_format = GST_DEBUG_FUNCPTR (gst_msdkdec_set_format);
   decoder_class->finish = GST_DEBUG_FUNCPTR (gst_msdkdec_finish);
