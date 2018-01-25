@@ -2,6 +2,7 @@ plugin_LTLIBRARIES = libgstmsdk.la
 
 libgstmsdk_la_SOURCES = \
 	gstmsdkcontext.c \
+	gstmsdkcontextutil.c \
 	gstmsdksystemmemory.c \
 	gstmsdkvideomemory.c \
 	gstmsdkbufferpool.c \
@@ -24,6 +25,7 @@ nodist_EXTRA_libgstmsdk_la_SOURCES = not_present.cxx
 noinst_HEADERS = \
 	msdk.h \
 	gstmsdkcontext.h \
+	gstmsdkcontextutil.h \
 	gstmsdksystemmemory.h \
 	gstmsdkvideomemory.h \
 	gstmsdkbufferpool.h \
