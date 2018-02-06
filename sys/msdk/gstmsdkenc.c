@@ -1157,6 +1157,8 @@ gst_msdkenc_start (GstVideoEncoder * encoder)
         thiz->context);
   }
 
+  gst_msdk_context_add_shared_async_depth (thiz->context, thiz->async_depth);
+
   /* Set the minimum pts to some huge value (1000 hours). This keeps
      the dts at the start of the stream from needing to be
      negative. */
