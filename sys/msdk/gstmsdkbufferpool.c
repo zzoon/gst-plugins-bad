@@ -33,6 +33,9 @@
 #include "gstmsdkbufferpool.h"
 #include "gstmsdksystemmemory.h"
 #include "gstmsdkvideomemory.h"
+#ifndef _WIN32
+#include "gstmsdkallocator_libva.h"
+#endif
 
 GST_DEBUG_CATEGORY_STATIC (gst_debug_msdkbufferpool);
 #define GST_CAT_DEFAULT gst_debug_msdkbufferpool
@@ -53,6 +56,7 @@ struct _GstMsdkBufferPoolPrivate
   GstAllocator *allocator;
   mfxFrameAllocResponse *alloc_response;
   gboolean use_video_memory;
+  gboolean use_dmabuf;
   gboolean add_videometa;
 };
 
@@ -62,6 +66,7 @@ gst_msdk_buffer_pool_get_options (GstBufferPool * pool)
   static const gchar *options[] = { GST_BUFFER_POOL_OPTION_VIDEO_META,
     GST_BUFFER_POOL_OPTION_VIDEO_ALIGNMENT,
     GST_BUFFER_POOL_OPTION_MSDK_USE_VIDEO_MEMORY,
+    GST_BUFFER_POOL_OPTION_MSDK_USE_DMABUF,
     NULL
   };
 
@@ -93,8 +98,9 @@ gst_msdk_buffer_pool_set_config (GstBufferPool * pool, GstStructure * config)
 
   if (allocator
       && (g_strcmp0 (allocator->mem_type, GST_MSDK_SYSTEM_MEMORY_NAME) != 0
+          && g_strcmp0 (allocator->mem_type, GST_MSDK_VIDEO_MEMORY_NAME) != 0
           && g_strcmp0 (allocator->mem_type,
-              GST_MSDK_VIDEO_MEMORY_NAME) != 0)) {
+              GST_MSDK_DMABUF_MEMORY_NAME) != 0)) {
     GST_INFO_OBJECT (pool,
         "This is not MSDK allocator. So this will be ignored");
     gst_object_unref (allocator);
@@ -122,11 +128,24 @@ gst_msdk_buffer_pool_set_config (GstBufferPool * pool, GstStructure * config)
     goto error_invalid_config;
   }
 
+  priv->use_dmabuf = gst_buffer_pool_config_has_option (config,
+      GST_BUFFER_POOL_OPTION_MSDK_USE_DMABUF);
+
+  if (!priv->use_video_memory && priv->use_dmabuf) {
+    GST_WARNING_OBJECT (pool,
+        "Can't use dmabuf since this is system msdk bufferpool");
+    priv->use_dmabuf = FALSE;
+  }
+
   /* create a new allocator if needed */
   if (!allocator) {
     GstAllocationParams params = { 0, 31, 0, 0, };
 
-    if (priv->use_video_memory)
+    if (priv->use_dmabuf)
+      allocator =
+          gst_msdk_dmabuf_allocator_new (priv->context, &video_info,
+          priv->alloc_response);
+    else if (priv->use_video_memory)
       allocator =
           gst_msdk_video_allocator_new (priv->context, &video_info,
           priv->alloc_response);
@@ -187,7 +206,9 @@ gst_msdk_buffer_pool_alloc_buffer (GstBufferPool * pool,
 
   buf = gst_buffer_new ();
 
-  if (priv->use_video_memory)
+  if (priv->use_dmabuf)
+    mem = gst_msdk_dmabuf_memory_new (priv->allocator);
+  else if (priv->use_video_memory)
     mem = gst_msdk_video_memory_new (priv->allocator);
   else
     mem = gst_msdk_system_memory_new (priv->allocator);
@@ -201,7 +222,9 @@ gst_msdk_buffer_pool_alloc_buffer (GstBufferPool * pool,
     GstVideoMeta *vmeta;
     GstVideoInfo *info;
 
-    if (priv->use_video_memory)
+    if (priv->use_dmabuf)
+      info = &GST_MSDK_DMABUF_ALLOCATOR_CAST (priv->allocator)->image_info;
+    else if (priv->use_video_memory)
       info = &GST_MSDK_VIDEO_ALLOCATOR_CAST (priv->allocator)->image_info;
     else
       info = &GST_MSDK_SYSTEM_ALLOCATOR_CAST (priv->allocator)->image_info;
@@ -211,7 +234,7 @@ gst_msdk_buffer_pool_alloc_buffer (GstBufferPool * pool,
         GST_VIDEO_INFO_WIDTH (info), GST_VIDEO_INFO_HEIGHT (info),
         GST_VIDEO_INFO_N_PLANES (info), info->offset, info->stride);
 
-    if (priv->use_video_memory) {
+    if (priv->use_video_memory && !priv->use_dmabuf) {
       vmeta->map = gst_video_meta_map_msdk_memory;
       vmeta->unmap = gst_video_meta_unmap_msdk_memory;
     }
@@ -236,6 +259,7 @@ gst_msdk_buffer_pool_acquire_buffer (GstBufferPool * pool,
   GstBuffer *buf = NULL;
   GstFlowReturn ret;
   mfxFrameSurface1 *surface;
+  gint fd;
 
   ret =
       GST_BUFFER_POOL_CLASS (parent_class)->acquire_buffer (pool, &buf, params);
@@ -259,6 +283,23 @@ gst_msdk_buffer_pool_acquire_buffer (GstBufferPool * pool,
       return GST_FLOW_ERROR;
     }
   }
+#ifndef _WIN32
+  /* When using dmabuf, we should confirm that the fd of memeory and
+   * the fd of surface match, since there is no guarantee that fd matchesu
+   * between surface and memory.
+   */
+  if (priv->use_dmabuf) {
+    surface = gst_msdk_get_surface_from_buffer (buf);
+    gst_msdk_get_dmabuf_info_from_surface (surface, &fd, NULL);
+
+    if (gst_dmabuf_memory_get_fd (gst_buffer_peek_memory (buf, 0)) != fd) {
+      GstMemory *mem;
+      mem = gst_msdk_dmabuf_memory_new_with_surface (priv->allocator, surface);
+      gst_buffer_replace_memory (buf, 0, mem);
+      gst_buffer_unset_flags (buf, GST_BUFFER_FLAG_TAG_MEMORY);
+    }
+  }
+#endif
 
   *out_buffer_ptr = buf;
   return GST_FLOW_OK;
