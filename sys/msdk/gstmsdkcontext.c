@@ -354,7 +354,22 @@ _find_request (gconstpointer resp, gconstpointer req)
   GstMsdkAllocResponse *cached_resp = (GstMsdkAllocResponse *) resp;
   mfxFrameAllocRequest *_req = (mfxFrameAllocRequest *) req;
 
-  return cached_resp ? cached_resp->request.Type != _req->Type : -1;
+  /* Confirm if it's under the size of the cached response */
+  if (_req->Info.Width <= cached_resp->request.Info.Width &&
+      _req->Info.Height <= cached_resp->request.Info.Height) {
+
+    /* For FEI ENC and PAK we need to distinguish between INTERNAL and EXTERNAL frames.
+     * This is from sample code (https://github.com/Intel-Media-SDK/samples).
+     */
+    if (_req->Type & cached_resp->
+        request.Type & (MFX_MEMTYPE_FROM_ENC | MFX_MEMTYPE_FROM_PAK))
+      return _req->Type & cached_resp->request.Type & 0x000f ? 0 : -1;
+    else
+      return _req->Type & cached_resp->
+          request.Type & MFX_MEMTYPE_FROM_DECODE ? 0 : -1;
+  }
+
+  return -1;
 }
 
 GstMsdkAllocResponse *
