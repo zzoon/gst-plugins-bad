@@ -861,7 +861,7 @@ gst_msdkenc_create_buffer_pool (GstMsdkEnc * thiz, GstCaps * caps,
   GstAllocator *allocator = NULL;
   GstVideoInfo info;
   GstVideoAlignment align;
-  GstAllocationParams params = { 0, 31, 0, 0, };
+  GstAllocationParams params = { 0, 127, 0, 0, };
   mfxFrameAllocResponse *alloc_resp = NULL;
 
   if (thiz->has_vpp)
@@ -1314,7 +1314,7 @@ gst_msdkenc_propose_allocation (GstVideoEncoder * encoder, GstQuery * query)
 
   if (pool) {
     GstStructure *config;
-    GstAllocationParams params = { 0, 31, 0, 0, };
+    GstAllocationParams params = { 0, 127, 0, 0, };
 
     config = gst_buffer_pool_get_config (GST_BUFFER_POOL_CAST (pool));
 

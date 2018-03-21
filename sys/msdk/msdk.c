@@ -215,7 +215,7 @@ gst_msdk_set_video_alignment (GstVideoInfo * info,
 
   gst_video_alignment_reset (alignment);
   for (i = 0; i < GST_VIDEO_INFO_N_PLANES (info); i++)
-    alignment->stride_align[i] = 31;    /* 32-byte alignment */
+    alignment->stride_align[i] = 127;   /* 128-byte alignment */
 
   if (width & 31)
     alignment->padding_right = GST_MSDK_ALIGNMENT_PADDING (width);

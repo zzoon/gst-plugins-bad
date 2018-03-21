@@ -139,7 +139,7 @@ gst_msdk_buffer_pool_set_config (GstBufferPool * pool, GstStructure * config)
 
   /* create a new allocator if needed */
   if (!allocator) {
-    GstAllocationParams params = { 0, 31, 0, 0, };
+    GstAllocationParams params = { 0, 127, 0, 0, };
 
     if (priv->use_dmabuf)
       allocator =

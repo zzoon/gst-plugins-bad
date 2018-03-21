@@ -756,7 +756,7 @@ gst_msdkdec_create_buffer_pool (GstMsdkDec * thiz, GstCaps * caps,
   GstAllocator *allocator = NULL;
   GstVideoInfo info;
   GstVideoAlignment align;
-  GstAllocationParams params = { 0, 31, 0, 0, };
+  GstAllocationParams params = { 0, 127, 0, 0, };
   mfxFrameAllocResponse *alloc_resp = NULL;
 
   alloc_resp = &thiz->alloc_resp;
